@@ -16,7 +16,7 @@
         body, html {
             width: 100%;
             height: 100%;
-            background-color: #050505;
+            background-color: #000000;
             font-family: 'Courier New', Courier, monospace;
             color: #fff;
         }
@@ -140,7 +140,6 @@
 <div id="game-container">
     <canvas id="gameCanvas"></canvas>
 
-    <!-- HUD -->
     <div id="hud">
         <div class="hud-card">
             VIDA
@@ -153,7 +152,6 @@
         </div>
     </div>
 
-    <!-- Tela Inicial -->
     <div id="start-screen" class="screen">
         <h1>THE EXIT OF HELL</h1>
         <p>Encontre o pentagrama para escapar de cada nível.<br>Colete poções para curar sua vida.<br>Cuidado com as criaturas nas sombras.</p>
@@ -161,7 +159,6 @@
         <div class="high-score">RECORDE: NÍVEL <span id="high-score-start">1</span></div>
     </div>
 
-    <!-- Tela Game Over -->
     <div id="gameover-screen" class="screen" style="display: none;">
         <h1>VOCÊ MORREU</h1>
         <p id="gameover-reason">Sua alma foi consumida pelo inferno.</p>
@@ -169,7 +166,6 @@
         <div class="high-score">MAIOR NÍVEL ALCANÇADO: <span id="high-score-over">1</span></div>
     </div>
 
-    <!-- Efeito de transição de nível -->
     <div id="flash-overlay"></div>
 </div>
 
@@ -179,6 +175,7 @@ class SoundEngine {
     constructor() {
         this.ctx = null;
         this.lastStepTime = 0;
+        this.droneNodes = [];
     }
 
     init() {
@@ -191,11 +188,71 @@ class SoundEngine {
         }
     }
 
-    // Passos do jogador
+    // Para qualquer música ambiente em execução
+    stopAmbience() {
+        this.droneNodes.forEach(node => {
+            try {
+                if (node.stop) node.stop();
+                if (node.disconnect) node.disconnect();
+            } catch (e) {}
+        });
+        this.droneNodes = [];
+    }
+
+    // Gera uma música ambiente sombria única para cada nível
+    startAmbience(level) {
+        if (!this.ctx) return;
+        this.stopAmbience();
+
+        const now = this.ctx.currentTime;
+        
+        // Frequências graves baseadas no nível para mudar a atmosfera a cada fase
+        const baseFreqs = [
+            [40, 43, 60],
+            [35, 38, 55],
+            [45, 48, 63],
+            [30, 33, 50],
+            [50, 54, 71]
+        ];
+        const freqs = baseFreqs[(level - 1) % baseFreqs.length];
+
+        // Criar osciladores de drone escuro
+        freqs.forEach((f, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            const lfo = this.ctx.createOscillator();
+            const lfoGain = this.ctx.createGain();
+
+            osc.type = idx % 2 === 0 ? 'sawtooth' : 'triangle';
+            osc.frequency.setValueAtTime(f, now);
+
+            // Filtro Lowpass para deixar abafado e sombrio
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(120 + (level * 10), now);
+
+            // Modulação de volume (LFO) para pulsação sinistra
+            lfo.frequency.setValueAtTime(0.1 + (idx * 0.05), now);
+            lfoGain.gain.setValueAtTime(0.03, now);
+            lfo.connect(lfoGain.gain);
+
+            gain.gain.setValueAtTime(0.08, now);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            osc.start(now);
+            lfo.start(now);
+
+            this.droneNodes.push(osc, lfo);
+        });
+    }
+
     playStep() {
         if (!this.ctx) return;
         const now = this.ctx.currentTime;
-        if (now - this.lastStepTime < 0.28) return; // Intervalo entre passos
+        if (now - this.lastStepTime < 0.28) return;
         this.lastStepTime = now;
 
         const osc = this.ctx.createOscillator();
@@ -215,7 +272,6 @@ class SoundEngine {
         osc.stop(now + 0.08);
     }
 
-    // Som de Dano / Ataque do Monstro
     playHit() {
         if (!this.ctx) return;
         const now = this.ctx.currentTime;
@@ -237,7 +293,6 @@ class SoundEngine {
         osc.stop(now + 0.2);
     }
 
-    // Som ao coletar Poção de Vida
     playHeal() {
         if (!this.ctx) return;
         const now = this.ctx.currentTime;
@@ -259,7 +314,6 @@ class SoundEngine {
         osc.stop(now + 0.25);
     }
 
-    // Som do Pentagrama / Transição de Nível
     playPortal() {
         if (!this.ctx) return;
         const now = this.ctx.currentTime;
@@ -281,9 +335,9 @@ class SoundEngine {
         osc.stop(now + 0.6);
     }
 
-    // Som de Game Over
     playGameOver() {
         if (!this.ctx) return;
+        this.stopAmbience();
         const now = this.ctx.currentTime;
 
         const osc = this.ctx.createOscillator();
@@ -313,8 +367,6 @@ const SVGS = {
         <circle cx="50" cy="22" r="12" fill="#555"/>
         <circle cx="50" cy="78" r="12" fill="#555"/>
         <circle cx="48" cy="50" r="18" fill="#e0ac69"/>
-        <rect x="60" y="42" width="22" height="16" rx="3" fill="#222"/>
-        <path d="M 80 40 L 95 35 L 95 65 L 80 60 Z" fill="#ffffaa" opacity="0.8"/>
     </svg>`,
     
     pentagram: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
@@ -324,14 +376,10 @@ const SVGS = {
     </svg>`,
 
     healthPotion: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-        <!-- Gargalo e Rolha -->
         <rect x="42" y="10" width="16" height="8" rx="2" fill="#8B4513"/>
         <rect x="38" y="18" width="24" height="12" fill="#bbb" stroke="#333" stroke-width="2"/>
-        <!-- Frasco -->
         <path d="M 38 30 C 20 40 15 85 50 88 C 85 85 80 40 62 30 Z" fill="rgba(255,255,255,0.2)" stroke="#fff" stroke-width="3"/>
-        <!-- Líquido Vermelho de Cura -->
         <path d="M 22 60 C 20 80 40 85 50 85 C 60 85 80 80 78 60 C 65 65 35 65 22 60 Z" fill="#ff0033"/>
-        <!-- Brilho Mágico -->
         <circle cx="40" cy="50" r="4" fill="#fff" opacity="0.8"/>
         <circle cx="60" cy="70" r="3" fill="#fff" opacity="0.8"/>
     </svg>`,
@@ -438,9 +486,9 @@ function initLevel(level) {
         pentagram.y = Math.random() * (mapHeight - 200) + 100;
     } while (Math.hypot(pentagram.x - player.x, pentagram.y - player.y) < minDistance);
 
-    // Gerar Poções de Vida espalhadas
+    // Gerar Poções de Vida
     potions = [];
-    const potionCount = 2 + Math.floor(Math.random() * 3); // 2 a 4 poções por nível
+    const potionCount = 2 + Math.floor(Math.random() * 3);
     for (let i = 0; i < potionCount; i++) {
         potions.push({
             x: Math.random() * (mapWidth - 200) + 100,
@@ -479,6 +527,9 @@ function initLevel(level) {
     }
 
     levelVal.textContent = level;
+
+    // Iniciar Música Ambiente Sinistra para o nível
+    audio.startAmbience(level);
 }
 
 // --- LÓGICA DE ATUALIZAÇÃO ---
@@ -502,7 +553,6 @@ function update() {
             player.x = Math.max(player.radius, Math.min(mapWidth - player.radius, player.x));
             player.y = Math.max(player.radius, Math.min(mapHeight - player.radius, player.y));
 
-            // Tocar som de passos
             audio.playStep();
         }
     }
@@ -510,13 +560,13 @@ function update() {
     // Colisão com Poções de Vida
     for (let i = potions.length - 1; i >= 0; i--) {
         const p = potions[i];
-        p.pulse += 0.05; // Animação de flutuação/pulso
+        p.pulse += 0.05;
         const distPotion = Math.hypot(p.x - player.x, p.y - player.y);
 
         if (distPotion < player.radius + p.radius) {
             healPlayer(20);
             audio.playHeal();
-            potions.splice(i, 1); // Remove poção coletada
+            potions.splice(i, 1);
         }
     }
 
@@ -543,7 +593,6 @@ function update() {
             m.y += Math.sin(m.angle) * m.speed;
         }
 
-        // Dano
         if (mdist < player.radius + m.radius && m.damageCooldown === 0) {
             takeDamage(5);
             m.damageCooldown = 30;
@@ -651,50 +700,32 @@ function draw() {
 
     ctx.restore();
 
-    // 6. LANTERNA (ILUMINAÇÃO)
-    drawFlashlight();
+    // 6. ÁREA ILUMINADA EM VOLTA DO PERSONAGEM (SEM BUG GRAFICO)
+    drawCircularLight();
 }
 
-function drawFlashlight() {
+function drawCircularLight() {
     ctx.save();
-
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.96)';
 
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
+    
+    // Raio da área iluminada reduzido
+    const innerLightRadius = 60;
+    const outerLightRadius = 130; 
 
-    const lightRadius = 320;
-    const coneAngle = Math.PI / 3.5;
-
-    ctx.beginPath();
-    ctx.rect(0, 0, canvas.width, canvas.height);
-
-    // Luz circular no jogador
-    ctx.arc(centerX, centerY, 35, 0, Math.PI * 2, true);
-
-    // Cone de luz
-    ctx.arc(
-        centerX, 
-        centerY, 
-        lightRadius, 
-        player.angle - coneAngle / 2, 
-        player.angle + coneAngle / 2, 
-        true
+    // Cria um gradiente radial onde o centro é transparente e as bordas ficam pretas
+    const lightGradient = ctx.createRadialGradient(
+        centerX, centerY, innerLightRadius,
+        centerX, centerY, outerLightRadius
     );
-    ctx.lineTo(centerX, centerY);
 
-    ctx.fill('evenodd');
+    lightGradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    lightGradient.addColorStop(1, 'rgba(0, 0, 0, 0.98)');
 
-    // Gradiente suave nas bordas
-    const grad = ctx.createRadialGradient(centerX, centerY, 20, centerX, centerY, lightRadius);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(0.8, 'rgba(0,0,0,0.3)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.96)');
-
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, lightRadius, 0, Math.PI * 2);
-    ctx.fill();
+    // Desenha a sombra suave cobrindo a tela inteira com o centro visível
+    ctx.fillStyle = lightGradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.restore();
 }
@@ -708,7 +739,7 @@ function gameLoop() {
 
 // --- INPUTS ---
 function handleInputStart(e) {
-    audio.init(); // Ativa o contexto de áudio na primeira interação
+    audio.init();
     if (gameState !== 'PLAYING') return;
     isTouching = true;
     updateInputPos(e);
