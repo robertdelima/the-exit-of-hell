@@ -110,6 +110,7 @@
             text-transform: uppercase;
             letter-spacing: 1px;
             transition: transform 0.1s, background 0.2s;
+            touch-action: manipulation;
         }
         .btn:active {
             transform: scale(0.95);
@@ -140,6 +141,7 @@
 <div id="game-container">
     <canvas id="gameCanvas"></canvas>
 
+    <!-- HUD -->
     <div id="hud">
         <div class="hud-card">
             VIDA
@@ -152,6 +154,7 @@
         </div>
     </div>
 
+    <!-- Tela Inicial -->
     <div id="start-screen" class="screen">
         <h1>THE EXIT OF HELL</h1>
         <p>Encontre o pentagrama para escapar de cada nível.<br>Colete poções para curar sua vida.<br>Cuidado com as criaturas nas sombras.</p>
@@ -159,6 +162,7 @@
         <div class="high-score">RECORDE: NÍVEL <span id="high-score-start">1</span></div>
     </div>
 
+    <!-- Tela Game Over -->
     <div id="gameover-screen" class="screen" style="display: none;">
         <h1>VOCÊ MORREU</h1>
         <p id="gameover-reason">Sua alma foi consumida pelo inferno.</p>
@@ -423,7 +427,7 @@ let player = {
     speed: 3.5, 
     angle: 0,
     isMoving: false,
-    walkCycle: 0 // Ciclo para controlar a animação das passadas
+    walkCycle: 0
 };
 
 let pentagram = { x: 0, y: 0, radius: 35 };
@@ -545,14 +549,12 @@ function update() {
             player.x = Math.max(player.radius, Math.min(mapWidth - player.radius, player.x));
             player.y = Math.max(player.radius, Math.min(mapHeight - player.radius, player.y));
 
-            // Avançar a animação de caminhada
             player.walkCycle += 0.25;
 
             audio.playStep();
         }
     }
 
-    // Suavizar retorno à posição neutra ao parar
     if (!player.isMoving) {
         player.walkCycle += (0 - player.walkCycle) * 0.2;
     }
@@ -644,11 +646,9 @@ function drawAnimatedPlayer() {
     ctx.translate(player.x, player.y);
     ctx.rotate(player.angle);
 
-    // Cálculos de oscilação baseados na caminhada
     const swingArm = Math.sin(player.walkCycle) * 10; 
-    const bodyBob = Math.abs(Math.cos(player.walkCycle)) * 2; // Pequeno pulso para cima/baixo
+    const bodyBob = Math.abs(Math.cos(player.walkCycle)) * 2;
 
-    // 1. OMBROS / CORPO
     ctx.fillStyle = "#3a3a3a";
     ctx.strokeStyle = "#111";
     ctx.lineWidth = 3;
@@ -658,26 +658,22 @@ function drawAnimatedPlayer() {
     ctx.fill();
     ctx.stroke();
 
-    // 2. BRAÇO ESQUERDO (Balança para frente/trás)
     ctx.fillStyle = "#555";
     ctx.beginPath();
     ctx.arc(-2 + swingArm, -20, 7, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    // 3. BRAÇO DIREITO (Balança oposto ao esquerdo)
     ctx.beginPath();
     ctx.arc(-2 - swingArm, 20, 7, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    // 4. CABEÇA / CAPUZ
     ctx.fillStyle = "#e0ac69";
     ctx.beginPath();
     ctx.arc(0, 0, 10, 0, Math.PI * 2);
     ctx.fill();
 
-    // Olhos (Virados para a direção do movimento)
     ctx.fillStyle = "#000";
     ctx.fillRect(4, -4, 3, 3);
     ctx.fillRect(4, 1, 3, 3);
@@ -695,7 +691,6 @@ function draw() {
     ctx.save();
     ctx.translate(canvas.width / 2 - player.x, canvas.height / 2 - player.y);
 
-    // 1. CHÃO
     tiles.forEach(t => {
         if (t.x + TILE_SIZE > player.x - canvas.width && t.x < player.x + canvas.width &&
             t.y + TILE_SIZE > player.y - canvas.height && t.y < player.y + canvas.height) {
@@ -706,7 +701,6 @@ function draw() {
         }
     });
 
-    // 2. PENTAGRAMA
     ctx.drawImage(
         pentagramImg, 
         pentagram.x - pentagram.radius, 
@@ -715,7 +709,6 @@ function draw() {
         pentagram.radius * 2
     );
 
-    // 3. POÇÕES DE VIDA
     potions.forEach(p => {
         ctx.save();
         const floatOffset = Math.sin(p.pulse) * 4;
@@ -729,7 +722,6 @@ function draw() {
         ctx.restore();
     });
 
-    // 4. MONSTROS
     monsters.forEach(m => {
         ctx.save();
         ctx.translate(m.x, m.y);
@@ -738,12 +730,10 @@ function draw() {
         ctx.restore();
     });
 
-    // 5. JOGADOR COM ANIMAÇÃO DE CAMINHADA
     drawAnimatedPlayer();
 
     ctx.restore();
 
-    // 6. ÁREA ILUMINADA EM VOLTA DO PERSONAGEM
     drawCircularLight();
 }
 
@@ -777,8 +767,10 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-// --- INPUTS ---
+// --- INPUTS AJUSTADOS PARA DISPOSITIVOS MÓVEIS ---
 function handleInputStart(e) {
+    if (e.target.tagName === 'BUTTON' || e.target.closest('.screen')) return;
+
     audio.init();
     if (gameState !== 'PLAYING') return;
     isTouching = true;
@@ -786,7 +778,7 @@ function handleInputStart(e) {
 }
 
 function handleInputMove(e) {
-    if (!isTouching) return;
+    if (!isTouching || gameState !== 'PLAYING') return;
     updateInputPos(e);
 }
 
@@ -801,15 +793,28 @@ function updateInputPos(e) {
     targetPos.y = clientY;
 }
 
+// Eventos de Mouse
 window.addEventListener('mousedown', handleInputStart);
 window.addEventListener('mousemove', handleInputMove);
 window.addEventListener('mouseup', handleInputEnd);
 
-window.addEventListener('touchstart', (e) => { handleInputStart(e); e.preventDefault(); }, { passive: false });
-window.addEventListener('touchmove', (e) => { handleInputMove(e); e.preventDefault(); }, { passive: false });
+// Eventos de Toque
+window.addEventListener('touchstart', (e) => {
+    if (e.target.tagName !== 'BUTTON') {
+        handleInputStart(e);
+    }
+}, { passive: true });
+
+window.addEventListener('touchmove', (e) => {
+    if (gameState === 'PLAYING') {
+        handleInputMove(e);
+        e.preventDefault();
+    }
+}, { passive: false });
+
 window.addEventListener('touchend', handleInputEnd);
 
-// --- BOTOES ---
+// --- BOTÕES ---
 document.getElementById('start-btn').addEventListener('click', () => {
     audio.init();
     startScreen.style.display = 'none';
