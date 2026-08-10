@@ -68,6 +68,36 @@
             background: linear-gradient(90deg, #ff0000, #ff5555);
             transition: width 0.15s ease-out;
         }
+
+        /* CONTROLE ANALÓGICO MOBILE */
+        #joystick-container {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 0, 0, 0.25);
+            border-radius: 50%;
+            z-index: 15;
+            touch-action: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.1);
+        }
+        #joystick-knob {
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 0, 0, 0.25);
+            border: 2px solid rgba(255, 85, 85, 0.5);
+            border-radius: 50%;
+            position: absolute;
+            transition: transform 0.05s ease-out;
+            pointer-events: none;
+        }
+
         /* Screens */
         .screen {
             position: absolute;
@@ -152,6 +182,11 @@
         <div class="hud-card">
             NÍVEL: <span id="level-val">1</span>
         </div>
+    </div>
+
+    <!-- Joystick Mobile -->
+    <div id="joystick-container">
+        <div id="joystick-knob"></div>
     </div>
 
     <!-- Tela Inicial -->
@@ -442,6 +477,10 @@ const TILE_SIZE = 100;
 let isTouching = false;
 let targetPos = { x: 0, y: 0 };
 
+// Estado do Analógico Virtual
+let joystickActive = false;
+let joystickVector = { x: 0, y: 0 };
+
 const healthBar = document.getElementById('health-bar');
 const levelVal = document.getElementById('level-val');
 const startScreen = document.getElementById('start-screen');
@@ -449,6 +488,9 @@ const gameoverScreen = document.getElementById('gameover-screen');
 const flashOverlay = document.getElementById('flash-overlay');
 const highScoreStart = document.getElementById('high-score-start');
 const highScoreOver = document.getElementById('high-score-over');
+
+const joystickContainer = document.getElementById('joystick-container');
+const joystickKnob = document.getElementById('joystick-knob');
 
 highScoreStart.textContent = highScore;
 
@@ -531,8 +573,21 @@ function update() {
 
     player.isMoving = false;
 
-    // Movimentação do Jogador
-    if (isTouching) {
+    // Movimentação via Joystick Analógico
+    if (joystickActive) {
+        player.isMoving = true;
+        player.angle = Math.atan2(joystickVector.y, joystickVector.x);
+        player.x += joystickVector.x * player.speed;
+        player.y += joystickVector.y * player.speed;
+
+        player.x = Math.max(player.radius, Math.min(mapWidth - player.radius, player.x));
+        player.y = Math.max(player.radius, Math.min(mapHeight - player.radius, player.y));
+
+        player.walkCycle += 0.25;
+        audio.playStep();
+    }
+    // Movimentação via Toque / Clique Direto
+    else if (isTouching) {
         const worldTargetX = targetPos.x + (player.x - canvas.width / 2);
         const worldTargetY = targetPos.y + (player.y - canvas.height / 2);
 
@@ -550,7 +605,6 @@ function update() {
             player.y = Math.max(player.radius, Math.min(mapHeight - player.radius, player.y));
 
             player.walkCycle += 0.25;
-
             audio.playStep();
         }
     }
@@ -580,260 +634,4 @@ function update() {
         return;
     }
 
-    // Atualizar Monstros
-    monsters.forEach(m => {
-        if (m.damageCooldown > 0) m.damageCooldown--;
-
-        const mdx = player.x - m.x;
-        const mdy = player.y - m.y;
-        const mdist = Math.hypot(mdx, mdy);
-
-        m.angle = Math.atan2(mdy, mdx);
-        
-        if (mdist > 10) {
-            m.x += Math.cos(m.angle) * m.speed;
-            m.y += Math.sin(m.angle) * m.speed;
-        }
-
-        if (mdist < player.radius + m.radius && m.damageCooldown === 0) {
-            takeDamage(5);
-            m.damageCooldown = 30;
-        }
-    });
-}
-
-function healPlayer(amount) {
-    health = Math.min(100, health + amount);
-    healthBar.style.width = health + '%';
-}
-
-function takeDamage(amount) {
-    health = Math.max(0, health - amount);
-    healthBar.style.width = health + '%';
-    audio.playHit();
-
-    if (health <= 0) {
-        audio.playGameOver();
-        gameOver();
-    }
-}
-
-function nextLevel() {
-    gameState = 'TRANSITION';
-    flashOverlay.style.opacity = '1';
-
-    setTimeout(() => {
-        currentLevel++;
-        if (currentLevel > highScore) {
-            highScore = currentLevel;
-            localStorage.setItem('toe_highscore', highScore);
-        }
-        initLevel(currentLevel);
-        gameState = 'PLAYING';
-        flashOverlay.style.opacity = '0';
-    }, 500);
-}
-
-function gameOver() {
-    gameState = 'GAMEOVER';
-    highScoreOver.textContent = highScore;
-    gameoverScreen.style.display = 'flex';
-}
-
-// --- RENDERIZAÇÃO DO PERSONAGEM COM ANIMAÇÃO ---
-function drawAnimatedPlayer() {
-    ctx.save();
-    ctx.translate(player.x, player.y);
-    ctx.rotate(player.angle);
-
-    const swingArm = Math.sin(player.walkCycle) * 10; 
-    const bodyBob = Math.abs(Math.cos(player.walkCycle)) * 2;
-
-    ctx.fillStyle = "#3a3a3a";
-    ctx.strokeStyle = "#111";
-    ctx.lineWidth = 3;
-
-    ctx.beginPath();
-    ctx.arc(0, 0, 18 + bodyBob * 0.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#555";
-    ctx.beginPath();
-    ctx.arc(-2 + swingArm, -20, 7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(-2 - swingArm, 20, 7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#e0ac69";
-    ctx.beginPath();
-    ctx.arc(0, 0, 10, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = "#000";
-    ctx.fillRect(4, -4, 3, 3);
-    ctx.fillRect(4, 1, 3, 3);
-
-    ctx.restore();
-}
-
-// --- RENDERIZAÇÃO ---
-function draw() {
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    if (gameState === 'MENU') return;
-
-    ctx.save();
-    ctx.translate(canvas.width / 2 - player.x, canvas.height / 2 - player.y);
-
-    tiles.forEach(t => {
-        if (t.x + TILE_SIZE > player.x - canvas.width && t.x < player.x + canvas.width &&
-            t.y + TILE_SIZE > player.y - canvas.height && t.y < player.y + canvas.height) {
-            ctx.fillStyle = t.color;
-            ctx.fillRect(t.x, t.y, TILE_SIZE, TILE_SIZE);
-            ctx.strokeStyle = '#111';
-            ctx.strokeRect(t.x, t.y, TILE_SIZE, TILE_SIZE);
-        }
-    });
-
-    ctx.drawImage(
-        pentagramImg, 
-        pentagram.x - pentagram.radius, 
-        pentagram.y - pentagram.radius, 
-        pentagram.radius * 2, 
-        pentagram.radius * 2
-    );
-
-    potions.forEach(p => {
-        ctx.save();
-        const floatOffset = Math.sin(p.pulse) * 4;
-        ctx.drawImage(
-            potionImg, 
-            p.x - p.radius, 
-            p.y - p.radius + floatOffset, 
-            p.radius * 2, 
-            p.radius * 2
-        );
-        ctx.restore();
-    });
-
-    monsters.forEach(m => {
-        ctx.save();
-        ctx.translate(m.x, m.y);
-        ctx.rotate(m.angle);
-        ctx.drawImage(m.img, -m.radius, -m.radius, m.radius * 2, m.radius * 2);
-        ctx.restore();
-    });
-
-    drawAnimatedPlayer();
-
-    ctx.restore();
-
-    drawCircularLight();
-}
-
-function drawCircularLight() {
-    ctx.save();
-
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    
-    const innerLightRadius = 60;
-    const outerLightRadius = 130; 
-
-    const lightGradient = ctx.createRadialGradient(
-        centerX, centerY, innerLightRadius,
-        centerX, centerY, outerLightRadius
-    );
-
-    lightGradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    lightGradient.addColorStop(1, 'rgba(0, 0, 0, 0.98)');
-
-    ctx.fillStyle = lightGradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.restore();
-}
-
-// --- LOOP DO JOGO ---
-function gameLoop() {
-    update();
-    draw();
-    requestAnimationFrame(gameLoop);
-}
-
-// --- INPUTS AJUSTADOS PARA DISPOSITIVOS MÓVEIS ---
-function handleInputStart(e) {
-    if (e.target.tagName === 'BUTTON' || e.target.closest('.screen')) return;
-
-    audio.init();
-    if (gameState !== 'PLAYING') return;
-    isTouching = true;
-    updateInputPos(e);
-}
-
-function handleInputMove(e) {
-    if (!isTouching || gameState !== 'PLAYING') return;
-    updateInputPos(e);
-}
-
-function handleInputEnd() {
-    isTouching = false;
-}
-
-function updateInputPos(e) {
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    targetPos.x = clientX;
-    targetPos.y = clientY;
-}
-
-// Eventos de Mouse
-window.addEventListener('mousedown', handleInputStart);
-window.addEventListener('mousemove', handleInputMove);
-window.addEventListener('mouseup', handleInputEnd);
-
-// Eventos de Toque
-window.addEventListener('touchstart', (e) => {
-    if (e.target.tagName !== 'BUTTON') {
-        handleInputStart(e);
-    }
-}, { passive: true });
-
-window.addEventListener('touchmove', (e) => {
-    if (gameState === 'PLAYING') {
-        handleInputMove(e);
-        e.preventDefault();
-    }
-}, { passive: false });
-
-window.addEventListener('touchend', handleInputEnd);
-
-// --- BOTÕES ---
-document.getElementById('start-btn').addEventListener('click', () => {
-    audio.init();
-    startScreen.style.display = 'none';
-    currentLevel = 1;
-    health = 100;
-    healthBar.style.width = '100%';
-    initLevel(currentLevel);
-    gameState = 'PLAYING';
-});
-
-document.getElementById('restart-btn').addEventListener('click', () => {
-    audio.init();
-    gameoverScreen.style.display = 'none';
-    startScreen.style.display = 'flex';
-    highScoreStart.textContent = highScore;
-    gameState = 'MENU';
-});
-
-gameLoop();
-</script>
-</body>
-</html>
+    // Atualizar
