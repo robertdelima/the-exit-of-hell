@@ -69,29 +69,29 @@
             transition: width 0.15s ease-out;
         }
 
-        /* CONTROLE ANALÓGICO MOBILE */
+        /* CONTROLE ANALÓGICO MOBILE (REPOSICIONADO) */
         #joystick-container {
             position: absolute;
-            bottom: 30px;
+            bottom: 100px; /* Elevado para não cortar no rodapé da tela */
             left: 50%;
             transform: translateX(-50%);
-            width: 120px;
-            height: 120px;
+            width: 100px; /* Leve redução para otimizar espaço */
+            height: 100px;
             background: rgba(255, 255, 255, 0.05);
-            border: 2px solid rgba(255, 0, 0, 0.25);
+            border: 2px solid rgba(255, 0, 0, 0.3);
             border-radius: 50%;
             z-index: 15;
             touch-action: none;
             display: flex;
             justify-content: center;
             align-items: center;
-            box-shadow: 0 0 15px rgba(255, 0, 0, 0.1);
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.15);
         }
         #joystick-knob {
-            width: 50px;
-            height: 50px;
-            background: rgba(255, 0, 0, 0.25);
-            border: 2px solid rgba(255, 85, 85, 0.5);
+            width: 42px;
+            height: 42px;
+            background: rgba(255, 0, 0, 0.3);
+            border: 2px solid rgba(255, 85, 85, 0.6);
             border-radius: 50%;
             position: absolute;
             transition: transform 0.05s ease-out;
